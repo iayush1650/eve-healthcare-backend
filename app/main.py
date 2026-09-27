@@ -1,16 +1,23 @@
 """EVE Healthcare API — Main application entry point."""
 
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.api import auth, bookings, centres, payments
 from app.config import get_settings
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 # ── Structured Logging Setup ────────────────────────────────────────────────
 
@@ -32,9 +39,31 @@ logger = structlog.get_logger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
 
-# ── App Factory ─────────────────────────────────────────────────────────────
+# ── Lifespan ────────────────────────────────────────────────────────────────
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup and shutdown lifecycle."""
+    # ── Startup ──────────────────────────────────────────────────────────
+    logger.info("app_starting", app_name=settings.APP_NAME)
+
+    # Create all tables (for development convenience)
+    from app.database import Base, engine
+    import app.models  # noqa: F401 — ensure all models are imported
+
+    Base.metadata.create_all(bind=engine)
+    logger.info("database_tables_created")
+
+    yield
+
+    # ── Shutdown ─────────────────────────────────────────────────────────
+    logger.info("app_shutting_down")
+
+
+# ── App Factory ─────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -46,6 +75,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 # ── Middleware ───────────────────────────────────────────────────────────────
@@ -107,24 +137,3 @@ def health_check():
     """Basic health check endpoint."""
     return {"status": "healthy", "service": settings.APP_NAME, "version": "1.0.0"}
 
-
-# ── Startup / Shutdown Events ───────────────────────────────────────────────
-
-
-@app.on_event("startup")
-def on_startup():
-    """Run on application startup."""
-    logger.info("app_starting", app_name=settings.APP_NAME)
-
-    # Create all tables (for development convenience)
-    from app.database import Base, engine
-    import app.models  # noqa: F401 — ensure all models are imported
-
-    Base.metadata.create_all(bind=engine)
-    logger.info("database_tables_created")
-
-
-@app.on_event("shutdown")
-def on_shutdown():
-    """Run on application shutdown."""
-    logger.info("app_shutting_down")

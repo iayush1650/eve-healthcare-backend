@@ -1,32 +1,69 @@
-# EVE Healthcare — Diagnostic Test Booking Service
+# 🏥 EVE Healthcare — Diagnostic Test Booking Service
 
-A backend service for diagnostic test bookings and simulated payments, built with **FastAPI**, **PostgreSQL**, and **Redis**.
+A production-ready backend service for diagnostic test bookings and simulated payments, built with **FastAPI**, **PostgreSQL**, and **Redis**.
 
-## Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Framework | FastAPI (Python 3.12) |
-| Database | PostgreSQL 16 |
-| ORM | SQLAlchemy 2.0 |
-| Auth | JWT (python-jose) + bcrypt |
-| Caching | Redis 7 |
-| Containerization | Docker + Docker Compose |
-| Testing | pytest + httpx |
-| Docs | Swagger UI (auto-generated) |
-| Logging | structlog (structured JSON) |
-| Rate Limiting | slowapi |
+> Built as part of the **EVE Healthcare SDE Intern — Backend Engineering Assignment**.
 
 ---
 
-## Quick Start
+## 🛠️ Skills & Technologies Used
+
+### Backend & Framework
+- **Python 3.12** — Primary programming language
+- **FastAPI** — High-performance async web framework with auto-generated OpenAPI docs
+- **Uvicorn** — ASGI server for running the application
+
+### Database & ORM
+- **PostgreSQL 16** — Primary relational database (production)
+- **SQLite** — Lightweight DB for local development and testing
+- **SQLAlchemy 2.0** — ORM with declarative models, relationships, and connection pooling
+- **Alembic-ready schema** — Table creation via `Base.metadata.create_all()`
+
+### Authentication & Security
+- **JWT (JSON Web Tokens)** — Stateless token-based authentication using `python-jose`
+- **bcrypt** — Industry-standard password hashing
+- **Bearer token scheme** — Swagger UI compatible auth flow
+
+### API Design & Validation
+- **RESTful API design** — Proper HTTP methods, status codes, and resource naming
+- **Pydantic v2** — Request/response validation with custom validators
+- **Pagination** — Cursor-based pagination on all list endpoints
+- **Rate Limiting** — `slowapi` for request throttling per IP
+
+### DevOps & Containerization
+- **Docker** — Multi-stage Dockerfile for containerized deployment
+- **Docker Compose** — Full stack orchestration (PostgreSQL + Redis + API)
+- **Environment-based config** — `.env` file support via `pydantic-settings`
+
+### Testing
+- **pytest** — 43 test cases covering all endpoints and edge cases
+- **httpx + TestClient** — FastAPI test client for integration testing
+- **In-memory SQLite** — Isolated test database per test case
+- **pytest-cov** — Code coverage reporting
+
+### Observability & Logging
+- **structlog** — Structured JSON logging with context variables
+- **Request validation error handler** — Custom structured error responses
+
+### Caching (Infrastructure Ready)
+- **Redis 7** — Configured in Docker Compose, ready for caching integration
+
+### Code Architecture
+- **Layered architecture** — Models → Schemas → Services → API routes
+- **Dependency injection** — FastAPI `Depends()` for DB sessions and auth
+- **Custom exception hierarchy** — `NotFoundException`, `ConflictException`, etc.
+- **Service layer pattern** — Business logic separated from route handlers
+
+---
+
+## 🚀 Quick Start
 
 ### Option 1: Docker (Recommended)
 
 ```bash
-# Clone and run
-git clone <repo-url>
-cd eve-healthcare
+# Clone the repository
+git clone https://github.com/iayush1650/eve-healthcare-backend.git
+cd eve-healthcare-backend
 
 # Start all services (PostgreSQL + Redis + API)
 docker-compose up --build
@@ -63,7 +100,7 @@ python seed_data.py
 
 ---
 
-## API Documentation
+## 📖 API Documentation
 
 Once running, visit:
 - **Swagger UI**: http://localhost:8000/docs
@@ -72,7 +109,7 @@ Once running, visit:
 
 ---
 
-## API Endpoints
+## 📡 API Endpoints
 
 ### Health Check
 | Method | Endpoint | Auth | Description |
@@ -89,17 +126,17 @@ Once running, visit:
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/api/v1/centres/` | ❌ | Create a diagnostic centre |
-| GET | `/api/v1/centres/` | ❌ | List centres (with pagination & location filter) |
-| GET | `/api/v1/centres/{id}` | ❌ | Get centre details with tests |
+| GET | `/api/v1/centres/` | ❌ | List centres (pagination + location filter) |
+| GET | `/api/v1/centres/{id}` | ❌ | Get centre details with available tests |
 | POST | `/api/v1/centres/tests` | ❌ | Create a diagnostic test |
-| GET | `/api/v1/centres/tests/all` | ❌ | List all tests (with pagination & category filter) |
+| GET | `/api/v1/centres/tests/all` | ❌ | List all tests (pagination + category filter) |
 | POST | `/api/v1/centres/tests/link` | ❌ | Link test to centre with pricing |
 
-### Bookings
+### Bookings (Authenticated)
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | POST | `/api/v1/bookings/` | ✅ | Create a booking |
-| GET | `/api/v1/bookings/` | ✅ | List user's bookings |
+| GET | `/api/v1/bookings/` | ✅ | List user's bookings (paginated) |
 | GET | `/api/v1/bookings/{id}` | ✅ | Get booking details |
 | POST | `/api/v1/bookings/{id}/cancel` | ✅ | Cancel a booking |
 
@@ -111,7 +148,7 @@ Once running, visit:
 
 ---
 
-## Example Requests
+## 💡 Example Requests
 
 ### 1. Sign Up
 ```bash
@@ -124,6 +161,20 @@ curl -X POST http://localhost:8000/api/v1/auth/signup \
   }'
 ```
 
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "bearer",
+  "user": {
+    "id": "a1b2c3d4-...",
+    "email": "patient@example.com",
+    "full_name": "Ayush Kumar",
+    "is_active": true
+  }
+}
+```
+
 ### 2. Login
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/login \
@@ -134,7 +185,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
   }'
 ```
 
-### 3. List Centres
+### 3. List Centres (with Location Filter)
 ```bash
 curl http://localhost:8000/api/v1/centres/?location=Mumbai
 ```
@@ -175,7 +226,7 @@ curl -X POST http://localhost:8000/api/v1/payments/webhook/ \
 
 ---
 
-## Database Schema
+## 🗄️ Database Schema
 
 ```
 ┌──────────────────┐       ┌──────────────────────┐       ┌──────────────────┐
@@ -248,8 +299,8 @@ curl -X POST http://localhost:8000/api/v1/payments/webhook/ \
 ### Key Design Decisions
 
 - **Centre-Test junction table (`centre_tests`)**: Different centres can offer the same test at different prices. The `UNIQUE(centre_id, test_id)` constraint prevents duplicate listings.
-- **One payment per booking**: The `unique` constraint on `payments.booking_id` enforces this.
-- **Webhook idempotency**: The `webhook_events` table records every `event_id`. Duplicate events are detected and ignored before any state mutation.
+- **One payment per booking**: The `unique` constraint on `payments.booking_id` enforces this at the database level.
+- **Webhook idempotency**: The `webhook_events` table records every `event_id`. Duplicate events are detected and ignored before any state mutation occurs.
 - **UUID primary keys**: Prevent ID enumeration attacks and are safe for distributed systems.
 
 ### Booking State Machine
@@ -265,85 +316,87 @@ PENDING ──► CONFIRMED  (on payment success)
 
 ---
 
-## Edge Cases Handled
+## 🛡️ Edge Cases Handled
 
-| Edge Case | How It's Handled |
-|-----------|-----------------|
-| Duplicate webhook events | `event_id` deduplication via `webhook_events` table |
-| Double payment for same booking | `UNIQUE` constraint on `payments.booking_id` + status check |
-| Booking with past date | Pydantic validator rejects past `appointment_datetime` |
-| Unauthorized booking access | User ID comparison with `ForbiddenException` |
-| Payment for another user's booking | User ID validation in `PaymentService` |
-| Invalid booking ID in payment | Returns 404 with descriptive message |
-| Cancel non-pending booking | Status check returns 400 |
-| Inactive diagnostic centre | Booking creation checks `centre.is_active` |
-| Unavailable test | Booking creation checks `centre_test.is_available` |
-| Duplicate user registration | Unique email constraint + 409 Conflict response |
-| Invalid/expired JWT | Returns 401 with WWW-Authenticate header |
-| Malformed request body | FastAPI/Pydantic validation with structured error response |
+| # | Edge Case | How It's Handled |
+|---|-----------|-----------------|
+| 1 | Duplicate webhook events | `event_id` deduplication via `webhook_events` table |
+| 2 | Double payment for same booking | `UNIQUE` constraint on `payments.booking_id` + status check |
+| 3 | Booking with past date | Pydantic validator rejects past `appointment_datetime` |
+| 4 | Unauthorized booking access | User ID comparison → returns `403 Forbidden` |
+| 5 | Payment for another user's booking | User ID validation in `PaymentService` → returns `400` |
+| 6 | Invalid booking ID in payment | Returns `404 Not Found` with descriptive message |
+| 7 | Cancel non-cancellable booking | Status check → only PENDING/CONFIRMED can be cancelled |
+| 8 | Inactive diagnostic centre | Booking creation checks `centre.is_active` |
+| 9 | Unavailable test at centre | Booking creation checks `centre_test.is_available` |
+| 10 | Duplicate user registration | Unique email constraint → returns `409 Conflict` |
+| 11 | Invalid/expired JWT token | Returns `401 Unauthorized` with `WWW-Authenticate` header |
+| 12 | Malformed request body | Pydantic validation with structured error response |
+| 13 | Duplicate centre-test linking | Unique constraint check → returns `409 Conflict` |
 
 ---
 
-## Running Tests
+## 🧪 Running Tests
 
 ```bash
 # Run all tests
 pytest -v
 
-# Run with coverage
+# Run with coverage report
 pytest --cov=app --cov-report=html -v
 
-# Run specific test file
+# Run specific test modules
 pytest tests/test_auth.py -v
 pytest tests/test_bookings.py -v
 pytest tests/test_payments.py -v
+pytest tests/test_centres.py -v
 ```
 
-Tests use an **in-memory SQLite** database for speed and isolation. Each test gets a fresh database.
+**Test Summary**: 43 test cases covering authentication, bookings, centres, payments, and webhook idempotency. Tests use an **in-memory SQLite** database for speed and complete isolation.
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
-eve-healthcare/
+eve-healthcare-backend/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPI app entry point
-│   ├── config.py             # Pydantic settings
-│   ├── database.py           # SQLAlchemy engine & session
+│   ├── main.py                # FastAPI app entry point with lifespan
+│   ├── config.py              # Pydantic settings (env-based config)
+│   ├── database.py            # SQLAlchemy engine & session management
 │   ├── core/
-│   │   ├── security.py       # JWT & password utilities
-│   │   └── exceptions.py     # Custom HTTP exceptions
+│   │   ├── security.py        # JWT creation/verification & bcrypt hashing
+│   │   └── exceptions.py      # Custom HTTP exception hierarchy
 │   ├── models/
-│   │   ├── user.py           # User model
-│   │   ├── centre.py         # DiagnosticCentre model
-│   │   ├── test.py           # DiagnosticTest & CentreTest models
-│   │   ├── booking.py        # Booking model with status enum
-│   │   └── payment.py        # Payment & WebhookEvent models
+│   │   ├── user.py            # User model
+│   │   ├── centre.py          # DiagnosticCentre model
+│   │   ├── test.py            # DiagnosticTest & CentreTest (junction) models
+│   │   ├── booking.py         # Booking model with BookingStatus enum
+│   │   └── payment.py         # Payment & WebhookEvent models
 │   ├── schemas/
-│   │   ├── user.py           # Auth request/response schemas
-│   │   ├── centre.py         # Centre schemas
-│   │   ├── test.py           # Test schemas
-│   │   ├── booking.py        # Booking schemas
-│   │   └── payment.py        # Payment & webhook schemas
+│   │   ├── user.py            # Auth request/response schemas
+│   │   ├── centre.py          # Centre schemas with nested tests
+│   │   ├── test.py            # Test & CentreTest schemas
+│   │   ├── booking.py         # Booking schemas with datetime validator
+│   │   └── payment.py         # Payment & webhook schemas
 │   ├── services/
-│   │   ├── auth.py           # Authentication business logic
-│   │   ├── booking.py        # Booking business logic
-│   │   └── payment.py        # Payment & webhook business logic
+│   │   ├── auth.py            # Signup/login business logic
+│   │   ├── booking.py         # Booking CRUD & validation logic
+│   │   └── payment.py         # Payment processing & idempotent webhooks
 │   └── api/
-│       ├── deps.py           # Shared dependencies (auth, DB)
-│       ├── auth.py           # Auth routes
-│       ├── centres.py        # Centre & test routes
-│       ├── bookings.py       # Booking routes
-│       └── payments.py       # Payment & webhook routes
+│       ├── deps.py            # Shared dependencies (auth, DB session)
+│       ├── auth.py            # Auth routes (signup, login)
+│       ├── centres.py         # Centre & test routes
+│       ├── bookings.py        # Booking routes (CRUD + cancel)
+│       └── payments.py        # Payment & webhook routes
 ├── tests/
-│   ├── conftest.py           # Test fixtures
-│   ├── test_auth.py          # Auth tests
-│   ├── test_centres.py       # Centre & test tests
-│   ├── test_bookings.py      # Booking tests
-│   └── test_payments.py      # Payment & webhook tests
-├── seed_data.py              # Database seeder
+│   ├── conftest.py            # Test fixtures & in-memory DB setup
+│   ├── test_auth.py           # 9 auth tests
+│   ├── test_centres.py        # 11 centre & test tests
+│   ├── test_bookings.py       # 11 booking tests
+│   └── test_payments.py       # 12 payment & webhook tests
+├── seed_data.py               # Database seeder (3 centres, 8 tests)
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.yml
@@ -354,33 +407,33 @@ eve-healthcare/
 
 ---
 
-## Important Assumptions
+## 📌 Important Assumptions
 
-1. **No real payment gateway**: Payments are simulated with a 70% success / 30% failure rate.
-2. **No admin role**: Centre/test management endpoints are open for simplicity. In production, these would be admin-only.
-3. **Single payment per booking**: Each booking can have at most one payment record.
-4. **Webhook authentication**: In production, webhooks would verify a signature/secret from the payment provider. Currently, the endpoint is open.
-5. **UTC timezone**: All timestamps are stored and compared in UTC.
-6. **No email verification**: User accounts are active immediately upon signup.
-
----
-
-## What I Would Improve with More Time
-
-- **Alembic migrations**: Add proper database migration versioning instead of `create_all`.
-- **Redis caching**: Cache frequently accessed centre/test data with TTL-based invalidation.
-- **Celery background jobs**: Process webhooks asynchronously for better throughput.
-- **Admin role & RBAC**: Role-based access control for centre/test management.
-- **Webhook signature verification**: HMAC-based signature validation for webhook security.
-- **Appointment slot management**: Prevent double-booking of time slots at centres.
-- **Email notifications**: Send booking confirmation and payment status emails.
-- **API versioning strategy**: Header-based or URL-based versioning for future API changes.
-- **Database connection pooling**: Fine-tune pool sizes for production load.
-- **Load testing**: k6 or Locust scripts for performance benchmarking.
-- **CI/CD pipeline**: GitHub Actions for automated testing, linting, and deployment.
+1. **No real payment gateway** — Payments are simulated with a 70% success / 30% failure rate using Python's `random.choices()`.
+2. **No admin role** — Centre/test management endpoints are open for simplicity. In production, these would be restricted to admin users with RBAC.
+3. **Single payment per booking** — Each booking can have at most one payment record, enforced by a database unique constraint.
+4. **Webhook authentication** — In production, webhooks would verify an HMAC signature from the payment provider. Currently, the endpoint is open for demonstration.
+5. **UTC timezone** — All timestamps are stored and compared in UTC for consistency.
+6. **No email verification** — User accounts are active immediately upon signup.
 
 ---
 
-## License
+## 🔮 What I Would Improve with More Time
+
+- **Alembic migrations** — Add proper database migration versioning instead of `create_all()`.
+- **Redis caching** — Cache frequently accessed centre/test data with TTL-based invalidation.
+- **Celery background jobs** — Process webhooks asynchronously for better throughput.
+- **Admin role & RBAC** — Role-based access control for centre/test management.
+- **Webhook signature verification** — HMAC-based signature validation for webhook security.
+- **Appointment slot management** — Prevent double-booking of time slots at centres.
+- **Email notifications** — Send booking confirmation and payment status emails via Celery.
+- **API versioning strategy** — Header-based or URL-based versioning for future API evolution.
+- **Database connection pooling** — Fine-tune pool sizes for production load.
+- **Load testing** — k6 or Locust scripts for performance benchmarking.
+- **CI/CD pipeline** — GitHub Actions for automated testing, linting, and deployment.
+
+---
+
+## 📜 License
 
 Built for the EVE Healthcare SDE Intern Assignment.

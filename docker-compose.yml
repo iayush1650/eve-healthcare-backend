@@ -54,5 +54,47 @@ services:
       - .:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
+  # ── Celery Worker ───────────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eve_celery_worker
+    environment:
+      DATABASE_URL: postgresql://eve_user:eve_password@db:5432/eve_healthcare
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: docker-dev-secret-key
+      WEBHOOK_SECRET: docker-webhook-secret
+      DEBUG: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: celery -A app.celery_app worker --loglevel=info --queues=celery,webhooks,cache --concurrency=2
+
+  # ── Celery Beat (Scheduler) ────────────────────────────────────────
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eve_celery_beat
+    environment:
+      DATABASE_URL: postgresql://eve_user:eve_password@db:5432/eve_healthcare
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: docker-dev-secret-key
+      WEBHOOK_SECRET: docker-webhook-secret
+      DEBUG: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: celery -A app.celery_app beat --loglevel=info
+
 volumes:
   postgres_data:

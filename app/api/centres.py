@@ -1,11 +1,23 @@
-"""Diagnostic Centres & Tests API routes."""
+"""Diagnostic Centres & Tests API routes with Redis caching."""
 
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.core.cache import (
+    CACHE_TTL_LONG,
+    CACHE_TTL_MEDIUM,
+    build_centre_detail_key,
+    build_centres_list_key,
+    build_tests_list_key,
+    cache_get,
+    cache_set,
+    invalidate_centres_cache,
+    invalidate_tests_cache,
+)
 from app.core.exceptions import NotFoundException
 from app.database import get_db
 from app.models.centre import DiagnosticCentre
@@ -24,6 +36,7 @@ from app.schemas.test import (
     TestResponse,
 )
 
+logger = structlog.get_logger(__name__)
 settings = get_settings()
 router = APIRouter(prefix="/centres", tags=["Diagnostic Centres & Tests"])
 
@@ -49,6 +62,9 @@ def create_centre(data: CentreCreateRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(centre)
 
+    # Invalidate centres cache since a new centre was added
+    invalidate_centres_cache()
+
     return _build_centre_response(centre)
 
 
@@ -56,7 +72,7 @@ def create_centre(data: CentreCreateRequest, db: Session = Depends(get_db)):
     "/",
     response_model=CentreListResponse,
     summary="List diagnostic centres",
-    description="Retrieve a paginated list of active diagnostic centres.",
+    description="Retrieve a paginated list of active diagnostic centres. Results are cached for 5 minutes.",
 )
 def list_centres(
     page: int = Query(1, ge=1),
@@ -65,6 +81,14 @@ def list_centres(
     db: Session = Depends(get_db),
 ):
     """List diagnostic centres with optional location filter and pagination."""
+    # ── Check cache first ────────────────────────────────────────────
+    cache_key = build_centres_list_key(page, page_size, location)
+    cached = cache_get(cache_key)
+    if cached is not None:
+        logger.info("centres_list_cache_hit", page=page, location=location)
+        return CentreListResponse(**cached)
+
+    # ── Cache miss — query database ──────────────────────────────────
     query = db.query(DiagnosticCentre).filter(DiagnosticCentre.is_active.is_(True))
 
     if location:
@@ -78,21 +102,35 @@ def list_centres(
         .all()
     )
 
-    return CentreListResponse(
+    response = CentreListResponse(
         centres=[_build_centre_response(c) for c in centres],
         total=total,
         page=page,
         page_size=page_size,
     )
 
+    # ── Store in cache ───────────────────────────────────────────────
+    cache_set(cache_key, response.model_dump(mode="json"), ttl=CACHE_TTL_MEDIUM)
+
+    return response
+
 
 @router.get(
     "/{centre_id}",
     response_model=CentreResponse,
     summary="Get diagnostic centre details",
+    description="Retrieve centre details with available tests. Cached for 15 minutes.",
 )
 def get_centre(centre_id: UUID, db: Session = Depends(get_db)):
     """Retrieve a single diagnostic centre with its available tests."""
+    # ── Check cache first ────────────────────────────────────────────
+    cache_key = build_centre_detail_key(str(centre_id))
+    cached = cache_get(cache_key)
+    if cached is not None:
+        logger.info("centre_detail_cache_hit", centre_id=str(centre_id))
+        return CentreResponse(**cached)
+
+    # ── Cache miss — query database ──────────────────────────────────
     centre = (
         db.query(DiagnosticCentre)
         .filter(DiagnosticCentre.id == centre_id)
@@ -101,7 +139,12 @@ def get_centre(centre_id: UUID, db: Session = Depends(get_db)):
     if not centre:
         raise NotFoundException(detail="Diagnostic centre not found")
 
-    return _build_centre_response(centre)
+    response = _build_centre_response(centre)
+
+    # ── Store in cache ───────────────────────────────────────────────
+    cache_set(cache_key, response.model_dump(mode="json"), ttl=CACHE_TTL_LONG)
+
+    return response
 
 
 # ── Diagnostic Tests ─────────────────────────────────────────────────────────
@@ -123,6 +166,10 @@ def create_test(data: TestCreateRequest, db: Session = Depends(get_db)):
     db.add(test)
     db.commit()
     db.refresh(test)
+
+    # Invalidate tests cache since a new test was added
+    invalidate_tests_cache()
+
     return TestResponse.model_validate(test)
 
 
@@ -130,6 +177,7 @@ def create_test(data: TestCreateRequest, db: Session = Depends(get_db)):
     "/tests/all",
     response_model=TestListResponse,
     summary="List all diagnostic tests",
+    description="Retrieve a paginated list of diagnostic tests. Cached for 5 minutes.",
 )
 def list_tests(
     page: int = Query(1, ge=1),
@@ -138,6 +186,14 @@ def list_tests(
     db: Session = Depends(get_db),
 ):
     """List all diagnostic tests with optional category filter."""
+    # ── Check cache first ────────────────────────────────────────────
+    cache_key = build_tests_list_key(page, page_size, category)
+    cached = cache_get(cache_key)
+    if cached is not None:
+        logger.info("tests_list_cache_hit", page=page, category=category)
+        return TestListResponse(**cached)
+
+    # ── Cache miss — query database ──────────────────────────────────
     query = db.query(DiagnosticTest)
 
     if category:
@@ -151,12 +207,17 @@ def list_tests(
         .all()
     )
 
-    return TestListResponse(
+    response = TestListResponse(
         tests=[TestResponse.model_validate(t) for t in tests],
         total=total,
         page=page,
         page_size=page_size,
     )
+
+    # ── Store in cache ───────────────────────────────────────────────
+    cache_set(cache_key, response.model_dump(mode="json"), ttl=CACHE_TTL_MEDIUM)
+
+    return response
 
 
 # ── Centre-Test Linking (pricing) ────────────────────────────────────────────
@@ -200,6 +261,10 @@ def link_test_to_centre(
     db.add(centre_test)
     db.commit()
     db.refresh(centre_test)
+
+    # Invalidate both caches since linking affects centre details & test listings
+    invalidate_centres_cache()
+    invalidate_tests_cache()
 
     return CentreTestResponse(
         id=centre_test.id,

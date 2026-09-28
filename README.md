@@ -36,7 +36,7 @@ A production-ready backend service for diagnostic test bookings and simulated pa
 - **Environment-based config** — `.env` file support via `pydantic-settings`
 
 ### Testing
-- **pytest** — 43 test cases covering all endpoints and edge cases
+- **pytest** — 55+ test cases covering all endpoints, caching, and edge cases
 - **httpx + TestClient** — FastAPI test client for integration testing
 - **In-memory SQLite** — Isolated test database per test case
 - **pytest-cov** — Code coverage reporting
@@ -45,8 +45,20 @@ A production-ready backend service for diagnostic test bookings and simulated pa
 - **structlog** — Structured JSON logging with context variables
 - **Request validation error handler** — Custom structured error responses
 
-### Caching (Infrastructure Ready)
-- **Redis 7** — Configured in Docker Compose, ready for caching integration
+### Caching
+- **Redis 7** — TTL-based caching for centre listings (5 min), centre details (15 min), and test listings (5 min)
+- **Graceful degradation** — App works without Redis; cache operations return `None`/`False` silently
+- **Pattern-based invalidation** — Cache busted on create/update operations using `SCAN` (non-blocking)
+- **Health endpoint** — `/health/cache` reports Redis connectivity and memory usage
+
+### Background Jobs & Webhook Retry
+- **Celery 5.4** — Distributed task queue with Redis as broker and result backend
+- **Async webhook processing** — `POST /payments/webhook/?async_processing=true` queues webhooks for background processing
+- **Exponential backoff retry** — Failed webhooks retry with ~10s → 20s → 40s → 80s → 160s delays (5 retries max)
+- **Retry jitter** — Randomized delays to prevent thundering herd on retries
+- **Dead-letter queue** — Tasks that exhaust all retries are rejected for manual inspection
+- **Failed webhook scanner** — Celery Beat periodic task to re-queue unprocessed `WebhookEvent` records
+- **Docker services** — `celery_worker` and `celery_beat` containers in `docker-compose.yml`
 
 ### Code Architecture
 - **Layered architecture** — Models → Schemas → Services → API routes
@@ -352,7 +364,7 @@ pytest tests/test_payments.py -v
 pytest tests/test_centres.py -v
 ```
 
-**Test Summary**: 43 test cases covering authentication, bookings, centres, payments, and webhook idempotency. Tests use an **in-memory SQLite** database for speed and complete isolation.
+**Test Summary**: 55+ test cases covering authentication, bookings, centres, payments, webhook idempotency, Redis caching, and Celery integration. Tests use an **in-memory SQLite** database for speed and complete isolation.
 
 ---
 
@@ -365,9 +377,11 @@ eve-healthcare-backend/
 │   ├── main.py                # FastAPI app entry point with lifespan
 │   ├── config.py              # Pydantic settings (env-based config)
 │   ├── database.py            # SQLAlchemy engine & session management
+│   ├── celery_app.py          # Celery configuration (Redis broker)
 │   ├── core/
 │   │   ├── security.py        # JWT creation/verification & bcrypt hashing
-│   │   └── exceptions.py      # Custom HTTP exception hierarchy
+│   │   ├── exceptions.py      # Custom HTTP exception hierarchy
+│   │   └── cache.py           # Redis caching utility (TTL, invalidation)
 │   ├── models/
 │   │   ├── user.py            # User model
 │   │   ├── centre.py          # DiagnosticCentre model
@@ -384,18 +398,23 @@ eve-healthcare-backend/
 │   │   ├── auth.py            # Signup/login business logic
 │   │   ├── booking.py         # Booking CRUD & validation logic
 │   │   └── payment.py         # Payment processing & idempotent webhooks
+│   ├── tasks/
+│   │   ├── __init__.py
+│   │   └── webhook_tasks.py   # Celery tasks: async webhook + retry scanner
 │   └── api/
 │       ├── deps.py            # Shared dependencies (auth, DB session)
 │       ├── auth.py            # Auth routes (signup, login)
-│       ├── centres.py         # Centre & test routes
+│       ├── centres.py         # Centre & test routes (with Redis caching)
 │       ├── bookings.py        # Booking routes (CRUD + cancel)
-│       └── payments.py        # Payment & webhook routes
+│       └── payments.py        # Payment & webhook routes (sync + async)
 ├── tests/
 │   ├── conftest.py            # Test fixtures & in-memory DB setup
 │   ├── test_auth.py           # 9 auth tests
 │   ├── test_centres.py        # 11 centre & test tests
 │   ├── test_bookings.py       # 11 booking tests
-│   └── test_payments.py       # 12 payment & webhook tests
+│   ├── test_payments.py       # 12 payment & webhook tests
+│   ├── test_cache.py          # 8 Redis caching tests
+│   └── test_celery.py         # 6 Celery & async webhook tests
 ├── seed_data.py               # Database seeder (3 centres, 8 tests)
 ├── requirements.txt
 ├── Dockerfile
@@ -421,14 +440,11 @@ eve-healthcare-backend/
 ## 🔮 What I Would Improve with More Time
 
 - **Alembic migrations** — Add proper database migration versioning instead of `create_all()`.
-- **Redis caching** — Cache frequently accessed centre/test data with TTL-based invalidation.
-- **Celery background jobs** — Process webhooks asynchronously for better throughput.
 - **Admin role & RBAC** — Role-based access control for centre/test management.
 - **Webhook signature verification** — HMAC-based signature validation for webhook security.
 - **Appointment slot management** — Prevent double-booking of time slots at centres.
 - **Email notifications** — Send booking confirmation and payment status emails via Celery.
 - **API versioning strategy** — Header-based or URL-based versioning for future API evolution.
-- **Database connection pooling** — Fine-tune pool sizes for production load.
 - **Load testing** — k6 or Locust scripts for performance benchmarking.
 - **CI/CD pipeline** — GitHub Actions for automated testing, linting, and deployment.
 

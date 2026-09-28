@@ -57,6 +57,14 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("database_tables_created")
 
+    # Initialize Redis cache connection
+    from app.core.cache import get_redis_client
+    redis_client = get_redis_client()
+    if redis_client:
+        logger.info("redis_cache_connected")
+    else:
+        logger.warning("redis_cache_unavailable", msg="Running without cache")
+
     yield
 
     # ── Shutdown ─────────────────────────────────────────────────────────
@@ -137,3 +145,26 @@ def health_check():
     """Basic health check endpoint."""
     return {"status": "healthy", "service": settings.APP_NAME, "version": "1.0.0"}
 
+
+@app.get(
+    "/health/cache",
+    tags=["Health"],
+    summary="Cache health check",
+    description="Returns Redis cache connectivity status.",
+)
+def cache_health_check():
+    """Redis cache health check endpoint."""
+    from app.core.cache import get_redis_client
+
+    client = get_redis_client()
+    if client:
+        try:
+            info = client.info("memory")
+            return {
+                "status": "connected",
+                "backend": "redis",
+                "used_memory_human": info.get("used_memory_human", "unknown"),
+            }
+        except Exception as e:
+            return {"status": "error", "backend": "redis", "error": str(e)}
+    return {"status": "unavailable", "backend": "redis", "message": "Redis not connected"}
